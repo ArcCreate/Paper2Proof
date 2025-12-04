@@ -93,7 +93,7 @@ def process_document_image(image_path):
 if __name__ == '__main__':
     # NOTE: The 'uploaded:' path is only available in this environment. 
     # To run this code locally, replace this with the actual path to your saved image file, e.g., "my_notes.png"
-    input_file = "debug_output/01_straightened.png" 
+    input_file = "images/img1.png" 
     
     try:
         process_document_image(input_file)
