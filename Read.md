@@ -5,23 +5,26 @@
 python -m venv venv
 source venv/bin/activate
 ```
-## Install pix2tex
+## Install pix2tex, opencv, matplotlib
 ```bash
 pip install --upgrade pip
 pip install "pix2tex[gui]"
+pip install opencv-python
+pip install matplotlib
 ```
-## Command Line usage
+## Command Line usage of pix2tex
 ```bash
 pix2tex images/my_equation.png
 ```
-## IPython usage
+
+## Api usage of pix2tex
+```bash
+pip install -U "pix2tex[api]"
+python -m pix2tex.api.run
+```
+
+## using the python file
 ```bash
 python convert.py
 ```
 
-## Api usage
-```bash
-pip install -U "pix2tex[api]"
-python -m pix2tex.api.run
-
-```
