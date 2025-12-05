@@ -1,4 +1,3 @@
-// App.js
 import React, { useState, useCallback } from 'react';
 import Header from './Header';
 import ProcessingPanel from './ProcessingPanel';
@@ -6,12 +5,12 @@ import './styles.css';
 import ImageModal from './ImageModal';
 
 const initialPipeline = {
-  preprocessing: { status: 'pending', image: null }, // Skew Correction
-  ocrRecognition: { status: 'pending', image: null }, // Cleaning/Binarizing
-  segmentation: { status: 'pending', image: null }, // Segmentation
-  modelInference: { status: 'pending', image: null }, // Model Inference
-  reassembly: { status: 'pending', image: null }, // Document Reassembly
-  validationOutput: { status: 'pending', image: null }, // Final Output Status
+  preprocessing: { status: 'pending', images: [] }, // Changed from image: null
+  ocrRecognition: { status: 'pending', images: [] },
+  segmentation: { status: 'pending', images: [] },
+  modelInference: { status: 'pending', images: [] },
+  reassembly: { status: 'pending', images: [] },
+  validationOutput: { status: 'pending', images: [] },
 };
 
 export default function App() {
@@ -21,7 +20,9 @@ export default function App() {
   const [pipelineStatus, setPipelineStatus] = useState(initialPipeline);
   const [isProcessing, setIsProcessing] = useState(false);
   const [jobId, setJobId] = useState(null);
-  const [modalImage, setModalImage] = useState(null);
+
+  // Changed: store an array of images for the modal
+  const [modalImages, setModalImages] = useState(null);
   const [modalTitle, setModalTitle] = useState('');
 
   const handleFileUpload = (uploadedFile) => {
@@ -40,48 +41,43 @@ export default function App() {
   }, []);
 
   const updateStepStatus = (step, status) => {
-    setPipelineStatus(prev => ({ ...prev, [step]: status }));
+    setPipelineStatus(prev => ({ ...prev, [step]: { ...prev[step], status } }));
   };
 
   // Function to update all steps at once from the API response
   const updatePipelineFromBackend = (steps) => {
-    setPipelineStatus({
-      preprocessing: {
-        status: steps.preprocessing.status,
-        image: steps.preprocessing.image ? `data:image/png;base64,${steps.preprocessing.image}` : null
-      },
-      ocrRecognition: {
-        status: steps.ocrRecognition.status,
-        image: steps.ocrRecognition.image ? `data:image/png;base64,${steps.ocrRecognition.image}` : null
-      },
-      segmentation: {
-        status: steps.segmentation.status,
-        image: steps.segmentation.image ? `data:image/png;base64,${steps.segmentation.image}` : null
-      },
-      modelInference: { status: steps.modelInference.status, image: null },
-      reassembly: { status: steps.reassembly.status, image: null },
-      validationOutput: { status: steps.validationOutput.status, image: null },
+    const newStatus = {};
+    Object.keys(steps).forEach(key => {
+      newStatus[key] = {
+        status: steps[key].status,
+        // Map the backend images list to the frontend
+        images: steps[key].images ? steps[key].images.map(img => ({
+          label: img.label,
+          src: `data:image/png;base64,${img.src}`
+        })) : []
+      };
     });
+    setPipelineStatus(newStatus);
   };
 
-  const showIntermediateImage = (title, base64Image) => {
+  // REVISED: Accepts an array of images
+  const showIntermediateImages = (title, imagesArray) => {
     setModalTitle(title);
-    setModalImage(base64Image);
+    setModalImages(imagesArray);
   };
 
   const closeModal = () => {
-    setModalImage(null);
+    setModalImages(null);
     setModalTitle('');
   }
 
-  // --- REVISED handleProcess ---
   const handleProcess = async () => {
     if (!file) return;
 
     setIsProcessing(true);
     setLatexOutput('Uploading...');
     resetPipeline();
-    setJobId(null); // Reset job ID
+    setJobId(null);
 
     const formData = new FormData();
     formData.append('image', file);
@@ -89,62 +85,54 @@ export default function App() {
     let currentJobId = null;
 
     try {
-      // --- STEP 1: UPLOAD & GET JOB ID ---
+      // 1. UPLOAD
       const uploadResponse = await fetch('http://localhost:5000/api/upload', {
         method: 'POST',
         body: formData
       });
-
-      if (!uploadResponse.ok) {
-        throw new Error(`Upload failed: ${uploadResponse.statusText}`);
-      }
       const uploadResult = await uploadResponse.json();
-      if (!uploadResult.success) {
-        throw new Error(`Upload failed: ${uploadResult.error_message}`);
-      }
+      if (!uploadResult.success) throw new Error(uploadResult.error_message);
+
       currentJobId = uploadResult.job_id;
       setJobId(currentJobId);
-      setLatexOutput(`Upload successful. Starting job ${currentJobId}...`);
+      setLatexOutput(`Upload successful. Starting processing...`);
 
-      // --- STEP 2: START PROCESSING ---
+      // 2. TRIGGER PROCESSING (Now returns immediately because of threading)
       const processResponse = await fetch(`http://localhost:5000/api/process/${currentJobId}`, {
         method: 'POST',
       });
+      if (!processResponse.ok) throw new Error(`Process start failed`);
 
-      if (!processResponse.ok) {
-        throw new Error(`Process start failed: ${processResponse.statusText}`);
-      }
-
-      // --- STEP 3: POLLING FOR STATUS ---
-      setLatexOutput('Processing started. Waiting for results...');
-
-      // Start Polling
-      await new Promise((resolve) => {
-        const pollInterval = setInterval(async () => {
+      // 3. POLL FOR STATUS
+      const pollInterval = setInterval(async () => {
+        try {
           const statusResponse = await fetch(`http://localhost:5000/api/status/${currentJobId}`);
           const statusResult = await statusResponse.json();
 
-          // Update status and images on the frontend
-          updatePipelineFromBackend(statusResult.steps);
+          // Update the UI with whatever step we are currently on
+          if (statusResult.steps) {
+            updatePipelineFromBackend(statusResult.steps);
+          }
 
           if (statusResult.status === 'complete') {
             clearInterval(pollInterval);
             setLatexOutput(statusResult.result);
-            resolve();
+            setIsProcessing(false);
           } else if (statusResult.status === 'failed') {
             clearInterval(pollInterval);
-            setLatexOutput(`\\text{Processing Failed: Check server logs.}`);
+            setLatexOutput(`\\text{Processing Failed: ${statusResult.error || 'Unknown error'}}`);
             updateStepStatus('validationOutput', 'failed');
-            resolve();
+            setIsProcessing(false);
           }
-        }, 1000); // Poll every 1 second
-      });
+        } catch (e) {
+          console.error("Polling error", e);
+          // Don't stop polling on a single network blip, but maybe log it
+        }
+      }, 500); // Check every 0.5 seconds for snappier updates
 
     } catch (error) {
       console.error('Processing failed:', error);
-      setLatexOutput(`\\text{Fatal Error: Could not connect or pipeline failed.}`);
-      updateStepStatus('validationOutput', 'failed');
-    } finally {
+      setLatexOutput(`\\text{Error: ${error.message}}`);
       setIsProcessing(false);
     }
   };
@@ -162,14 +150,14 @@ export default function App() {
           onFileUpload={handleFileUpload}
           onProcess={handleProcess}
           // Pass the new modal handler
-          onStepClick={showIntermediateImage}
+          onStepClick={showIntermediateImages}
         />
 
-        {/* Render the Modal if an image is set */}
-        {modalImage && (
+        {/* Render the Modal if images are set */}
+        {modalImages && (
           <ImageModal
             title={modalTitle}
-            imageSrc={modalImage}
+            images={modalImages}
             onClose={closeModal}
           />
         )}

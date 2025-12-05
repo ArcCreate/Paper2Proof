@@ -1,12 +1,11 @@
-// ProcessingPanel.js
-import React, { useRef, useState } from 'react';
+import React, { useRef } from 'react';
 
 const pipelineStepsMap = [
   { key: 'preprocessing', label: '1. Skew Correction' },
   { key: 'ocrRecognition', label: '2. Cleaning & Binarizing' },
-  { key: 'segmentation', label: '3. Equation Segmentation' }, // NEW STEP
-  { key: 'modelInference', label: '4. LaTeX OCR Inference' }, // NEW STEP
-  { key: 'reassembly', label: '5. Document Reassembly' }, // NEW STEP
+  { key: 'segmentation', label: '3. Equation Segmentation' },
+  { key: 'modelInference', label: '4. LaTeX OCR Inference' },
+  { key: 'reassembly', label: '5. Document Reassembly' },
   { key: 'validationOutput', label: '6. Validation & Output' },
 ];
 
@@ -22,7 +21,6 @@ export default function ProcessingPanel({
   onStepClick
 }) {
   const fileInputRef = useRef(null);
-  const [activeStepImage, setActiveStepImage] = useState(null);
 
   const handleDrop = (e) => {
     e.preventDefault();
@@ -58,8 +56,9 @@ export default function ProcessingPanel({
 
   const handleStepClick = (stepKey, label) => {
     const stepData = pipelineStatus[stepKey];
-    if (stepData && stepData.image) {
-      onStepClick(label, stepData.image); // Pass the step label and image to the parent
+    // Check if stepData exists and has an images array with items
+    if (stepData && stepData.images && stepData.images.length > 0) {
+      onStepClick(label, stepData.images);
     }
   };
 
@@ -137,9 +136,9 @@ export default function ProcessingPanel({
             <li
               key={step.key}
               className={pipelineStatus[step.key].status}
-              // Pass the label to the handler
               onClick={() => handleStepClick(step.key, step.label)}
-              style={{ cursor: pipelineStatus[step.key].image ? 'pointer' : 'default' }}
+              // Change cursor to pointer only if there are images
+              style={{ cursor: (pipelineStatus[step.key].images && pipelineStatus[step.key].images.length > 0) ? 'pointer' : 'default' }}
             >
               <span className="step-label">{step.label}</span>
               <span className="step-status">

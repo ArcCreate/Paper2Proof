@@ -273,34 +273,97 @@ body {
     z-index: 1000;
 }
 
-/* Modal Content Box */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
 .modal-content {
-    background: white;
+    background-color: white;
     padding: 20px;
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    max-width: 90%;
+    width: 90%;
+    max-width: 800px;
+    /* Increased max-width for better gallery view */
     max-height: 90vh;
-    overflow-y: auto;
+    /* Limit height so scrolling works */
+    position: relative;
+    display: flex;
+    flex-direction: column;
 }
 
 .modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    margin-bottom: 20px;
     border-bottom: 1px solid #eee;
     padding-bottom: 10px;
-    margin-bottom: 10px;
 }
 
 .close-button {
     background: none;
     border: none;
-    font-size: 1.5rem;
+    font-size: 24px;
     cursor: pointer;
-    color: #333;
 }
 
-.modal-body {
+/* New Gallery Styles */
+.scrollable-gallery {
+    overflow-y: auto;
+    padding-right: 10px;
+    /* Space for scrollbar */
+    flex: 1;
+    /* Takes remaining height */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.gallery-item {
+    width: 100%;
     text-align: center;
+    margin-bottom: 20px;
+}
+
+.gallery-label {
+    margin-bottom: 10px;
+    color: #333;
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.image-wrapper {
+    background: #f8f9fa;
+    padding: 10px;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    display: inline-block;
+    max-width: 100%;
+}
+
+.step-image {
+    max-width: 100%;
+    max-height: 60vh;
+    /* Prevent single images from being too tall */
+    display: block;
+    margin: 0 auto;
+}
+
+.gallery-divider {
+    border: 0;
+    height: 1px;
+    background: #ddd;
+    margin: 30px 0;
+    width: 80%;
+    margin-left: auto;
+    margin-right: auto;
 }
