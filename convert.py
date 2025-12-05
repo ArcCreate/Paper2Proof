@@ -147,6 +147,76 @@ class MathScanner:
         self._save_debug_image(clean_binary, "02c_cleaned_binary_final")
         return clean_binary, img
 
+    def _merge_boxes(self, boxes, overlap_threshold=0.3):
+        """
+        Merges overlapping bounding boxes using IoU-like logic to consolidate 
+        fragmented equation parts.
+        """
+        if not boxes:
+            return []
+            
+        # Convert to numpy array for easier manipulation
+        boxes_np = np.array(boxes)
+        
+        # Calculate area
+        area = (boxes_np[:, 2]) * (boxes_np[:, 3]) # w * h
+
+        # Initialize list to keep track of boxes to be kept
+        merged_boxes = []
+        
+        # A list to keep track of which boxes have already been included in a merged box
+        is_merged = [False] * len(boxes_np)
+
+        for i in range(len(boxes_np)):
+            if is_merged[i]:
+                continue
+
+            current_box = boxes_np[i]
+            x1, y1, w1, h1 = current_box
+            x2, y2 = x1 + w1, y1 + h1
+            
+            # Start a new merged box with the current box
+            merged_rect = current_box.copy()
+            is_merged[i] = True
+            
+            # Iterate through the rest of the boxes
+            for j in range(i + 1, len(boxes_np)):
+                if is_merged[j]:
+                    continue
+                    
+                next_box = boxes_np[j]
+                nx1, ny1, nw1, nh1 = next_box
+                nx2, ny2 = nx1 + nw1, ny1 + nh1
+                
+                # Calculate Intersection coordinates
+                inter_x1 = max(x1, nx1)
+                inter_y1 = max(y1, ny1)
+                inter_x2 = min(x2, nx2)
+                inter_y2 = min(y2, ny2)
+                
+                # Calculate Intersection area
+                inter_w = max(0, inter_x2 - inter_x1)
+                inter_h = max(0, inter_y2 - inter_y1)
+                intersection_area = inter_w * inter_h
+                
+                # Check for significant overlap with either box
+                area_ratio_1 = intersection_area / area[i]
+                area_ratio_2 = intersection_area / area[j]
+                
+                if area_ratio_1 > overlap_threshold or area_ratio_2 > overlap_threshold:
+                    # Merge boxes (calculate the new minimal enclosing bounding box)
+                    new_x1 = min(merged_rect[0], nx1)
+                    new_y1 = min(merged_rect[1], ny1)
+                    new_x2 = max(merged_rect[0] + merged_rect[2], nx2)
+                    new_y2 = max(merged_rect[1] + merged_rect[3], ny2)
+                    
+                    merged_rect = np.array([new_x1, new_y1, new_x2 - new_x1, new_y2 - new_y1])
+                    is_merged[j] = True
+            
+            merged_boxes.append(merged_rect.tolist())
+            
+        return merged_boxes
+
     def segment_regions(self, binary_img, original_img):
         print("\n[STEP 3] Segmenting Equations...")
         
@@ -165,33 +235,48 @@ class MathScanner:
                 valid_boxes.append(box)
 
         if not valid_boxes:
-            print(" > No valid equation regions found.")
+            print(" > No valid equation regions found after initial filter.")
             return []
+            
+        # 2. Bounding Box Merging
+        print(f" > Found {len(valid_boxes)} initial regions. Merging overlaps...")
+        merged_boxes = self._merge_boxes(valid_boxes, overlap_threshold=0.25)
+        print(f" > Consolidated to {len(merged_boxes)} regions after merging.")
 
-        # Smart Sorting (Top-to-Bottom, then Left-to-Right)
-        # 1. Sort primarily by Y to find rows
-        valid_boxes.sort(key=lambda b: b[1])
+        # 3. Smart Sorting (Top-to-Bottom, then Left-to-Right) (Enhanced Logic)
+        # Sort by Y-coordinate first (approximate row order)
+        merged_boxes.sort(key=lambda b: b[1])
         
         sorted_boxes = []
-        row_threshold = 20 # pixels
-        current_row = [valid_boxes[0]]
+        current_row = []
+        
+        # Estimate vertical spacing dynamically
+        all_heights = [b[3] for b in merged_boxes]
+        median_height = np.median(all_heights) if all_heights else 30 
+        # Dynamic row threshold is a fraction of median height
+        row_threshold = median_height * 0.7 
+        
+        for box in merged_boxes:
+            if not current_row:
+                current_row.append(box)
+                continue
 
-        for i in range(1, len(valid_boxes)):
-            prev_y = current_row[-1][1]
-            curr_y = valid_boxes[i][1]
+            prev_box_y = np.mean([b[1] + b[3]/2 for b in current_row]) # Mean center Y of current row
+            curr_box_y_center = box[1] + box[3]/2
             
-            # If current box is roughly on same line as previous
-            if abs(curr_y - prev_y) < row_threshold:
-                current_row.append(valid_boxes[i])
+            # If current box's center is close to the mean center Y of the row
+            if abs(curr_box_y_center - prev_box_y) < row_threshold:
+                current_row.append(box)
             else:
                 # Row finished: Sort this row by X (Left to Right)
                 current_row.sort(key=lambda b: b[0])
                 sorted_boxes.extend(current_row)
-                current_row = [valid_boxes[i]]
+                current_row = [box] # Start new row
         
         # Append last row
-        current_row.sort(key=lambda b: b[0])
-        sorted_boxes.extend(current_row)
+        if current_row:
+            current_row.sort(key=lambda b: b[0])
+            sorted_boxes.extend(current_row)
         
         regions = []
         debug_draw = original_img.copy() 
@@ -200,7 +285,7 @@ class MathScanner:
             x, y, w, h = box
             
             # Add padding for clean crop
-            pad = 2
+            pad = 3
             x_p = max(0, x - pad)
             y_p = max(0, y - pad)
             w_p = min(original_img.shape[1] - x_p, w + 2*pad)
@@ -212,7 +297,7 @@ class MathScanner:
             cv2.rectangle(debug_draw, (x, y), (x+w, y+h), (0, 255, 0), 2)
             cv2.putText(debug_draw, str(i+1), (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
 
-        self._save_debug_image(debug_draw, "03b_segmented_boxes")
+        self._save_debug_image(debug_draw, "03b_segmented_boxes_refined")
         return regions
 
     def image_to_latex(self, regions):
@@ -280,28 +365,34 @@ class MathScanner:
         print("="*40)
         print(f"STARTING PIPELINE FOR: {image_path}")
         print("="*40)
-        self._clear_debug_output()
+        # We comment out _clear_debug_output() for safety in a web environment, 
+        # as multiple users might run it concurrently, but it's fine for initial testing.
+        # self._clear_debug_output() 
 
         try:
             straight_img = self.correct_skew(image_path)
             
-            # binary is the mask, clean_bg is the BGR image for cropping
             binary, clean_bg = self.clean_image(straight_img) 
             
             regions = self.segment_regions(binary, clean_bg)
             latex_lines = self.image_to_latex(regions)
-            self.reassemble_document(latex_lines)
+            final_latex_doc = self.reassemble_document(latex_lines) # Capture the result
             
             print("\nPipeline Complete. Check 'debug_output' folder.")
             
+            # <<< IMPORTANT CHANGE: Return the result >>>
+            return final_latex_doc
+            
         except ValueError as e:
             print(f"\n[ERROR] Pipeline failed: {e}")
+            raise  # Re-raise the error to be caught by the Flask route
         except Exception as e:
             print(f"\n[ERROR] Unexpected error: {e}")
+            raise # Re-raise the error
 
 if __name__ == "__main__":
     converter = MathScanner()
-    image_filename = 'images/testing2.png'
+    image_filename = 'images/testing1.png'
     
     if len(sys.argv) > 1:
         image_filename = sys.argv[1]
