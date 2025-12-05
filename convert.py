@@ -220,6 +220,7 @@ class MathScanner:
     def segment_regions(self, binary_img, original_img):
         print("\n[STEP 3] Segmenting Equations...")
         
+        # --- 1. Initial Contour Detection ---
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (75, 12)) 
         dilated = cv2.dilate(binary_img, kernel, iterations=1)
         self._save_debug_image(dilated, "03a_dilation_mask")
@@ -227,7 +228,7 @@ class MathScanner:
         contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         bounding_boxes = [cv2.boundingRect(c) for c in contours]
         
-        # Filter noise
+        # Filter noise (assuming a small minimum size for equation regions)
         valid_boxes = []
         for c, box in zip(contours, bounding_boxes):
             x, y, w, h = box
@@ -236,24 +237,23 @@ class MathScanner:
 
         if not valid_boxes:
             print(" > No valid equation regions found after initial filter.")
-            return []
+            # FIX: Return two values even on failure
+            return [], original_img 
             
-        # 2. Bounding Box Merging
+        # --- 2. Bounding Box Merging ---
         print(f" > Found {len(valid_boxes)} initial regions. Merging overlaps...")
+        # Use a slightly stricter overlap threshold for initial grouping
         merged_boxes = self._merge_boxes(valid_boxes, overlap_threshold=0.25)
         print(f" > Consolidated to {len(merged_boxes)} regions after merging.")
 
-        # 3. Smart Sorting (Top-to-Bottom, then Left-to-Right) (Enhanced Logic)
-        # Sort by Y-coordinate first (approximate row order)
+        # --- 3. Smart Sorting (Top-to-Bottom, then Left-to-Right) ---
         merged_boxes.sort(key=lambda b: b[1])
         
         sorted_boxes = []
         current_row = []
         
-        # Estimate vertical spacing dynamically
         all_heights = [b[3] for b in merged_boxes]
         median_height = np.median(all_heights) if all_heights else 30 
-        # Dynamic row threshold is a fraction of median height
         row_threshold = median_height * 0.7 
         
         for box in merged_boxes:
@@ -261,10 +261,9 @@ class MathScanner:
                 current_row.append(box)
                 continue
 
-            prev_box_y = np.mean([b[1] + b[3]/2 for b in current_row]) # Mean center Y of current row
+            prev_box_y = np.mean([b[1] + b[3]/2 for b in current_row])
             curr_box_y_center = box[1] + box[3]/2
             
-            # If current box's center is close to the mean center Y of the row
             if abs(curr_box_y_center - prev_box_y) < row_threshold:
                 current_row.append(box)
             else:
@@ -278,28 +277,33 @@ class MathScanner:
             current_row.sort(key=lambda b: b[0])
             sorted_boxes.extend(current_row)
         
+        # --- 4. Crop Regions and Draw Debug Image ---
         regions = []
         debug_draw = original_img.copy() 
 
         for i, box in enumerate(sorted_boxes):
             x, y, w, h = box
             
-            # Add padding for clean crop
+            # Add padding for clean crop (3 pixels)
             pad = 3
             x_p = max(0, x - pad)
             y_p = max(0, y - pad)
+            # Ensure width/height do not exceed image boundaries
             w_p = min(original_img.shape[1] - x_p, w + 2*pad)
             h_p = min(original_img.shape[0] - y_p, h + 2*pad)
 
             roi = original_img[y_p:y_p+h_p, x_p:x_p+w_p]
             regions.append(roi)
             
+            # Draw bounding box and index on the debug image
             cv2.rectangle(debug_draw, (x, y), (x+w, y+h), (0, 255, 0), 2)
             cv2.putText(debug_draw, str(i+1), (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
 
         self._save_debug_image(debug_draw, "03b_segmented_boxes_refined")
-        return regions
-
+        
+        # FIX APPLIED: Always return two values: regions and the debug image.
+        return regions, debug_draw
+    
     def image_to_latex(self, regions):
         print("\n[STEP 4] Running LatexOCR Model...")
         latex_results = []
