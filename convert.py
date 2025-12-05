@@ -301,7 +301,7 @@ class MathScanner:
 
 if __name__ == "__main__":
     converter = MathScanner()
-    image_filename = 'image.png'
+    image_filename = 'images/testing2.png'
     
     if len(sys.argv) > 1:
         image_filename = sys.argv[1]
