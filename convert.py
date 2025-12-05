@@ -1,3 +1,4 @@
+import shutil
 import cv2
 import numpy as np
 from PIL import Image
@@ -149,38 +150,57 @@ class MathScanner:
     def segment_regions(self, binary_img, original_img):
         print("\n[STEP 3] Segmenting Equations...")
         
-        # Dilation: Wide width (100) connects horizontal math, short height (3) keeps lines separate
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (100, 3)) 
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (75, 12)) 
         dilated = cv2.dilate(binary_img, kernel, iterations=1)
         self._save_debug_image(dilated, "03a_dilation_mask")
 
         contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         bounding_boxes = [cv2.boundingRect(c) for c in contours]
         
-        valid_regions = []
-        
-        # Filter noise and zip contours with boxes for sorting
-        zipped_data = []
+        # Filter noise
+        valid_boxes = []
         for c, box in zip(contours, bounding_boxes):
             x, y, w, h = box
-            if w > 40 and h > 25: 
-                zipped_data.append((c, box))
+            if w > 20 and h > 20: 
+                valid_boxes.append(box)
 
-        if not zipped_data:
+        if not valid_boxes:
             print(" > No valid equation regions found.")
             return []
 
-        # Sort top-to-bottom based on Y coordinate
-        zipped_data.sort(key=lambda b: b[1][1])
+        # Smart Sorting (Top-to-Bottom, then Left-to-Right)
+        # 1. Sort primarily by Y to find rows
+        valid_boxes.sort(key=lambda b: b[1])
+        
+        sorted_boxes = []
+        row_threshold = 20 # pixels
+        current_row = [valid_boxes[0]]
+
+        for i in range(1, len(valid_boxes)):
+            prev_y = current_row[-1][1]
+            curr_y = valid_boxes[i][1]
+            
+            # If current box is roughly on same line as previous
+            if abs(curr_y - prev_y) < row_threshold:
+                current_row.append(valid_boxes[i])
+            else:
+                # Row finished: Sort this row by X (Left to Right)
+                current_row.sort(key=lambda b: b[0])
+                sorted_boxes.extend(current_row)
+                current_row = [valid_boxes[i]]
+        
+        # Append last row
+        current_row.sort(key=lambda b: b[0])
+        sorted_boxes.extend(current_row)
         
         regions = []
         debug_draw = original_img.copy() 
 
-        for i, (_, box) in enumerate(zipped_data):
+        for i, box in enumerate(sorted_boxes):
             x, y, w, h = box
             
             # Add padding for clean crop
-            pad = 10
+            pad = 2
             x_p = max(0, x - pad)
             y_p = max(0, y - pad)
             w_p = min(original_img.shape[1] - x_p, w + 2*pad)
@@ -200,14 +220,15 @@ class MathScanner:
         latex_results = []
         
         for i, region in enumerate(regions):
+            # Converting to grayscale for the model input.
             region_gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
-            # Re-apply Otsu to ensure distinct black/white for the model
-            _, region_binary = cv2.threshold(region_gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            
+
+            # The model works better with anti-aliased (smooth) edges.            
+            # Save the clean crop for debugging
             output_filename = os.path.join(DEBUG_OUTPUT_DIR, f"4a_region_{i+1}_cropped.png")
-            cv2.imwrite(output_filename, region_binary)
+            cv2.imwrite(output_filename, region_gray)
             
-            pil_img = Image.fromarray(region_binary)
+            pil_img = Image.fromarray(region_gray)
             
             try:
                 result = self.model(pil_img)
@@ -215,7 +236,7 @@ class MathScanner:
                 latex_results.append(result)
             except Exception as e:
                 print(f" > Region {i+1} Failed: {e}")
-                latex_results.append("\\text{Error reading equation}")
+                latex_results.append("\\text{Error}")
 
         return latex_results
     
@@ -241,10 +262,25 @@ class MathScanner:
         print(f" > Saved to '{DEBUG_OUTPUT_DIR}/final_output.tex'")
         return full_doc
 
+    def _clear_debug_output(self):
+        """Removes the existing debug_output directory and recreates it."""
+        if os.path.exists(DEBUG_OUTPUT_DIR):
+            try:
+                # Use shutil.rmtree to remove the directory and all its contents
+                shutil.rmtree(DEBUG_OUTPUT_DIR)
+                print(f"[CLEANUP] Deleted old '{DEBUG_OUTPUT_DIR}' folder.")
+            except OSError as e:
+                print(f"[ERROR] Could not remove directory: {e}")
+        
+        # Recreate the directory to ensure it exists for the new run
+        os.makedirs(DEBUG_OUTPUT_DIR)
+        print(f"[CLEANUP] Recreated '{DEBUG_OUTPUT_DIR}' folder for new run.")
+    
     def run_pipeline(self, image_path):
         print("="*40)
         print(f"STARTING PIPELINE FOR: {image_path}")
         print("="*40)
+        self._clear_debug_output()
 
         try:
             straight_img = self.correct_skew(image_path)
@@ -265,7 +301,7 @@ class MathScanner:
 
 if __name__ == "__main__":
     converter = MathScanner()
-    image_filename = 'images/img3.png'
+    image_filename = 'image.png'
     
     if len(sys.argv) > 1:
         image_filename = sys.argv[1]
