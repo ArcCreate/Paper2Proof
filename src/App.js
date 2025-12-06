@@ -1,11 +1,22 @@
 import React, { useState, useCallback } from 'react';
-import Header from './Header';
 import ProcessingPanel from './ProcessingPanel';
-import './styles.css';
 import ImageModal from './ImageModal';
+import './styles.css';
+
+// ... (Header Component)
+function Header() {
+  return (
+    <header className="app-header">
+      <div className="logo">MathScanner <span>Equation OCR Pipeline</span></div>
+      <nav className="user-nav">
+        {/* Placeholder links */}
+      </nav>
+    </header>
+  );
+}
 
 const initialPipeline = {
-  preprocessing: { status: 'pending', images: [] }, // Changed from image: null
+  preprocessing: { status: 'pending', images: [] },
   ocrRecognition: { status: 'pending', images: [] },
   segmentation: { status: 'pending', images: [] },
   modelInference: { status: 'pending', images: [] },
@@ -21,9 +32,10 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [jobId, setJobId] = useState(null);
 
-  // Changed: store an array of images for the modal
   const [modalImages, setModalImages] = useState(null);
   const [modalTitle, setModalTitle] = useState('');
+
+  const [segmentResults, setSegmentResults] = useState([]);
 
   const handleFileUpload = (uploadedFile) => {
     if (uploadedFile) {
@@ -40,17 +52,11 @@ export default function App() {
     setIsProcessing(false);
   }, []);
 
-  const updateStepStatus = (step, status) => {
-    setPipelineStatus(prev => ({ ...prev, [step]: { ...prev[step], status } }));
-  };
-
-  // Function to update all steps at once from the API response
   const updatePipelineFromBackend = (steps) => {
     const newStatus = {};
     Object.keys(steps).forEach(key => {
       newStatus[key] = {
         status: steps[key].status,
-        // Map the backend images list to the frontend
         images: steps[key].images ? steps[key].images.map(img => ({
           label: img.label,
           src: `data:image/png;base64,${img.src}`
@@ -60,7 +66,6 @@ export default function App() {
     setPipelineStatus(newStatus);
   };
 
-  // REVISED: Accepts an array of images
   const showIntermediateImages = (title, imagesArray) => {
     setModalTitle(title);
     setModalImages(imagesArray);
@@ -86,6 +91,7 @@ export default function App() {
 
     try {
       // 1. UPLOAD
+      // Note: Replace localhost with your actual backend URL
       const uploadResponse = await fetch('http://localhost:5000/api/upload', {
         method: 'POST',
         body: formData
@@ -95,9 +101,9 @@ export default function App() {
 
       currentJobId = uploadResult.job_id;
       setJobId(currentJobId);
-      setLatexOutput(`Upload successful. Starting processing...`);
+      setLatexOutput(`\\text{Upload successful. Processing...}`);
 
-      // 2. TRIGGER PROCESSING (Now returns immediately because of threading)
+      // 2. TRIGGER PROCESSING
       const processResponse = await fetch(`http://localhost:5000/api/process/${currentJobId}`, {
         method: 'POST',
       });
@@ -109,7 +115,6 @@ export default function App() {
           const statusResponse = await fetch(`http://localhost:5000/api/status/${currentJobId}`);
           const statusResult = await statusResponse.json();
 
-          // Update the UI with whatever step we are currently on
           if (statusResult.steps) {
             updatePipelineFromBackend(statusResult.steps);
           }
@@ -121,14 +126,12 @@ export default function App() {
           } else if (statusResult.status === 'failed') {
             clearInterval(pollInterval);
             setLatexOutput(`\\text{Processing Failed: ${statusResult.error || 'Unknown error'}}`);
-            updateStepStatus('validationOutput', 'failed');
             setIsProcessing(false);
           }
         } catch (e) {
           console.error("Polling error", e);
-          // Don't stop polling on a single network blip, but maybe log it
         }
-      }, 500); // Check every 0.5 seconds for snappier updates
+      }, 500);
 
     } catch (error) {
       console.error('Processing failed:', error);
@@ -140,7 +143,7 @@ export default function App() {
   return (
     <div className="app-container">
       <Header />
-      <main className="dashboard-layout">
+      <main>
         <ProcessingPanel
           file={file}
           previewUrl={previewUrl}
@@ -149,11 +152,9 @@ export default function App() {
           isProcessing={isProcessing}
           onFileUpload={handleFileUpload}
           onProcess={handleProcess}
-          // Pass the new modal handler
           onStepClick={showIntermediateImages}
         />
 
-        {/* Render the Modal if images are set */}
         {modalImages && (
           <ImageModal
             title={modalTitle}
@@ -161,7 +162,6 @@ export default function App() {
             onClose={closeModal}
           />
         )}
-
       </main>
     </div>
   );

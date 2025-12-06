@@ -1,14 +1,28 @@
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
+import { BlockMath } from 'react-katex';
+
+const LatexRenderer = ({ latex }) => {
+  if (!latex) {
+    return (
+      <div style={{ textAlign: 'center', opacity: 0.5, padding: '20px' }}>
+        <div style={{ marginBottom: '10px' }}>∅</div>
+        <div>Processing pending</div>
+      </div>
+    );
+  }
+
+  return (
+    <BlockMath math={latex} />
+  );
+};
 
 const pipelineStepsMap = [
-  { key: 'preprocessing', label: '1. Skew Correction' },
-  { key: 'ocrRecognition', label: '2. Cleaning & Binarizing' },
-  { key: 'segmentation', label: '3. Equation Segmentation' },
-  { key: 'modelInference', label: '4. LaTeX OCR Inference' },
-  { key: 'reassembly', label: '5. Document Reassembly' },
-  { key: 'validationOutput', label: '6. Validation & Output' },
+  { key: 'preprocessing', label: 'Image Preprocessing', desc: 'Noise reduction, contrast enhancement' },
+  { key: 'ocrRecognition', label: 'Character Recognition', desc: 'OCR processing with math symbols' },
+  { key: 'segmentation', label: 'Equation Segmentation', desc: 'Isolating distinct formula regions' },
+  { key: 'latexGeneration', label: 'LaTeX Generation', desc: 'Converting to LaTeX format' },
+  { key: 'validationOutput', label: 'Validation & Output', desc: 'Final quality check' },
 ];
-
 
 export default function ProcessingPanel({
   file,
@@ -21,6 +35,26 @@ export default function ProcessingPanel({
   onStepClick
 }) {
   const fileInputRef = useRef(null);
+
+  // Helper to calculate progress percentage
+  const progressPercent = useMemo(() => {
+    // We map over our display steps to calculate progress based on what is visible
+    const totalSteps = pipelineStepsMap.length;
+
+    let completedCount = 0;
+
+    // Check status of each mapped step
+    if (pipelineStatus.preprocessing?.status === 'success') completedCount++;
+    if (pipelineStatus.ocrRecognition?.status === 'success') completedCount++;
+    if (pipelineStatus.segmentation?.status === 'success') completedCount++;
+    if (pipelineStatus.modelInference?.status === 'success') completedCount++;
+    if (pipelineStatus.validationOutput?.status === 'success') completedCount++;
+
+    if (totalSteps === 0) return 0;
+    if (isProcessing && completedCount === 0) return 5; // visual kickstart
+
+    return Math.round((completedCount / totalSteps) * 100);
+  }, [pipelineStatus, isProcessing]);
 
   const handleDrop = (e) => {
     e.preventDefault();
@@ -41,44 +75,68 @@ export default function ProcessingPanel({
     }
   };
 
-  const getStepIcon = (status) => {
+  const getStatusText = (status) => {
     switch (status) {
-      case 'success':
-        return '✅';
-      case 'processing':
-        return '🔄';
-      case 'failed':
-        return '❌';
-      default:
-        return '⚪';
+      case 'success': return 'Complete';
+      case 'processing': return 'Processing...';
+      case 'pending': return 'Pending';
+      case 'failed': return 'Failed';
+      default: return 'Pending';
     }
   };
 
-  const handleStepClick = (stepKey, label) => {
-    const stepData = pipelineStatus[stepKey];
-    // Check if stepData exists and has an images array with items
-    if (stepData && stepData.images && stepData.images.length > 0) {
-      onStepClick(label, stepData.images);
+  const getStatusColorClass = (status) => {
+    switch (status) {
+      case 'success': return 'text-success';
+      case 'processing': return 'text-processing';
+      default: return 'text-pending';
     }
   };
+
+  const getIconContent = (status) => {
+    if (status === 'success') return '✓';
+    if (status === 'processing') return '⟳';
+    if (status === 'failed') return '!';
+    return '';
+  };
+
+  // 2. MAPPED SEGMENTATION DATA HERE
+  const displaySteps = [
+    {
+      ...pipelineStepsMap[0],
+      status: pipelineStatus.preprocessing?.status || 'pending',
+      data: pipelineStatus.preprocessing
+    },
+    {
+      ...pipelineStepsMap[1],
+      status: pipelineStatus.ocrRecognition?.status || 'pending',
+      data: pipelineStatus.ocrRecognition
+    },
+    {
+      ...pipelineStepsMap[2],
+      status: pipelineStatus.segmentation?.status || 'pending',
+      data: pipelineStatus.segmentation
+    },
+    {
+      ...pipelineStepsMap[3],
+      // Mapping "modelInference" from backend to "LaTeX Generation" in UI
+      status: pipelineStatus.modelInference?.status || 'pending',
+      data: pipelineStatus.modelInference
+    },
+    {
+      ...pipelineStepsMap[4],
+      status: pipelineStatus.validationOutput?.status || 'pending',
+      data: pipelineStatus.validationOutput
+    },
+  ];
 
   return (
-    <div className="main-content">
-      <h2>OCR Pipeline Dashboard</h2>
-      <p>Upload images containing mathematical equations to extract LaTeX code</p>
+    <div className="dashboard-layout">
 
-      {/* Upload Section */}
-      <div
-        className="upload-section"
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-      >
-        <div className="drop-zone">
-          <span className="upload-icon">☁️</span>
-          <p>Drop your image here or click to browse</p>
-          <button onClick={() => fileInputRef.current.click()} disabled={isProcessing}>
-            Select File
-          </button>
+      {/* 1. Upload Section (Left) */}
+      <div className="card upload-card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3>Upload Image</h3>
           <input
             type="file"
             ref={fileInputRef}
@@ -86,68 +144,128 @@ export default function ProcessingPanel({
             accept="image/png, image/jpeg, .pdf"
             style={{ display: 'none' }}
           />
-          <p className="support-text">Supports PNG, JPG, PDF (Max 10MB)</p>
+          <div style={{ color: '#999', fontSize: '1.2rem' }}>🖼️</div>
         </div>
-      </div>
 
-      <div className="io-panels">
-        {/* Input Image Viewer - Always shows original previewUrl */}
-        <div className="panel input-panel">
-          <div className="panel-header">Input Image</div>
-          <div className="panel-body image-viewer">
-            <div className="image-placeholder">
-              {previewUrl ? ( // Use original previewUrl only
-                <img src={previewUrl} alt="Input Equation" style={{ maxWidth: '100%', maxHeight: '100%' }} />
-              ) : (
-                'No image uploaded'
+        <div
+          className="drop-zone"
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+        >
+          {previewUrl ? (
+            <div style={{ textAlign: 'center' }}>
+              <img src={previewUrl} alt="Preview" style={{ maxHeight: '200px', maxWidth: '100%', marginBottom: '15px', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} />
+              <p style={{ fontSize: '0.9rem', color: '#666', fontWeight: '500' }}>{file.name}</p>
+              {!isProcessing && (
+                <button className="browse-btn" onClick={onProcess}>
+                  Start Processing
+                </button>
               )}
             </div>
-          </div>
-          <div className="image-info">
-            <p>Status: <span id="status-text">{isProcessing ? 'Processing...' : (file ? 'File Loaded' : 'Ready')}</span></p>
-            <p>Resolution: <span id="resolution-text">--</span></p>
-            <p>File Size: <span id="size-text">{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : '--'}</span></p>
-          </div>
-        </div>
-
-        {/* LaTeX Output Viewer */}
-        <div className="panel output-panel">
-          <div className="panel-header">LaTeX Output</div>
-          <textarea
-            className="latex-output-box"
-            value={latexOutput || '$ \\text{LaTeX output will appear here} $'}
-            readOnly
-          />
-          <button
-            className="process-btn"
-            onClick={onProcess}
-            disabled={!file || isProcessing}
-          >
-            {isProcessing ? 'Processing...' : 'Process Image'}
-          </button>
+          ) : (
+            <>
+              <div className="upload-icon-circle">☁️</div>
+              <h4 style={{ margin: '0 0 10px 0' }}>Drop your math equation image here</h4>
+              <p style={{ fontSize: '0.9rem', color: '#888', margin: 0 }}>Support for PNG, JPG, PDF files up to 10MB</p>
+              <button
+                className="browse-btn"
+                onClick={() => fileInputRef.current.click()}
+                disabled={isProcessing}
+              >
+                Browse Files
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Pipeline Status Section (Interactive) */}
-      <div className="pipeline-status">
-        <h3>Processing Pipeline Status (Click a successful step to view intermediate image)</h3>
-        <ul id="pipeline-steps">
-          {pipelineStepsMap.map(step => (
+      {/* 2. Pipeline Section (Right) */}
+      <div className="card pipeline-card">
+        <h3>Processing Pipeline</h3>
+
+        <ul className="pipeline-list">
+          {displaySteps.map((step, index) => (
             <li
-              key={step.key}
-              className={pipelineStatus[step.key].status}
-              onClick={() => handleStepClick(step.key, step.label)}
-              // Change cursor to pointer only if there are images
-              style={{ cursor: (pipelineStatus[step.key].images && pipelineStatus[step.key].images.length > 0) ? 'pointer' : 'default' }}
+              key={index}
+              className={`pipeline-step ${step.status}`}
+              onClick={() => {
+                if (step.data && step.data.images && step.data.images.length > 0) {
+                  onStepClick(step.label, step.data.images);
+                }
+              }}
+              // Only show pointer cursor if there are images to show
+              style={{ cursor: (step.data?.images?.length > 0) ? 'pointer' : 'default' }}
             >
-              <span className="step-label">{step.label}</span>
-              <span className="step-status">
-                {getStepIcon(pipelineStatus[step.key].status)} {pipelineStatus[step.key].status}
-              </span>
+              <div className="step-icon">
+                {getIconContent(step.status)}
+              </div>
+              <div className="step-info">
+                <span className="step-label">{step.label}</span>
+                <span className="step-desc">{step.desc}</span>
+              </div>
+
+              <div style={{ textAlign: 'right' }}>
+                <span className={`step-status-text ${getStatusColorClass(step.status)}`}>
+                  {getStatusText(step.status)}
+                </span>
+                {/* Visual hint that images are available */}
+                {step.data?.images?.length > 0 && (
+                  <div style={{ fontSize: '0.7rem', color: '#666', marginTop: '2px' }}>
+                    View {step.data.images.length} Image{step.data.images.length > 1 ? 's' : ''}
+                  </div>
+                )}
+              </div>
             </li>
           ))}
         </ul>
+
+        {/* Overall Progress Bar */}
+        <div className="progress-container">
+          <div className="progress-label">
+            <span>Overall Progress</span>
+            <span>{progressPercent}%</span>
+          </div>
+          <div className="progress-track">
+            <div
+              className="progress-fill"
+              style={{ width: `${progressPercent}%` }}
+            ></div>
+          </div>
+        </div>
       </div>
+
+      {/* 3. Output Section (Bottom) */}
+      <div className="card output-section">
+        <div className="output-header">
+          <h3>LaTeX Output</h3>
+          <div className="action-buttons">
+            <button onClick={() => navigator.clipboard.writeText(latexOutput)}>
+              📋 Copy
+            </button>
+            <button>⬇ Export</button>
+          </div>
+        </div>
+
+        <div className="output-grid">
+          {/* Left: Raw Code */}
+          <div className="code-editor">
+            <span className="editor-label">Raw LaTeX Code</span>
+            <textarea
+              className="raw-latex-textarea"
+              value={latexOutput || ""}
+              readOnly
+              placeholder="\begin{align}..."
+            />
+
+          </div>
+
+          {/* Right: Preview */}
+          <div className="render-preview">
+            <LatexRenderer latex={latexOutput} />
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }

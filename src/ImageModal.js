@@ -1,31 +1,53 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 export default function ImageModal({ title, images, onClose }) {
-    // If no images array is passed or it's empty, don't render
+    // Prevent scrolling on the body when modal is open
+    useEffect(() => {
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = 'unset';
+        };
+    }, []);
+
     if (!images || images.length === 0) return null;
 
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+
+                {/* Header */}
                 <div className="modal-header">
-                    <h3>{title}</h3>
-                    <button className="close-button" onClick={onClose}>&times;</button>
+                    <h3 className="modal-title">{title}</h3>
+                    <button className="modal-close-btn" onClick={onClose}>
+                        &times;
+                    </button>
                 </div>
-                <div className="modal-body scrollable-gallery">
-                    {images.map((imgData, index) => (
-                        <div key={index} className="gallery-item">
-                            <h4 className="gallery-label">{imgData.label}</h4>
-                            <div className="image-wrapper">
-                                <img
-                                    src={imgData.src}
-                                    alt={imgData.label}
-                                    className="step-image"
-                                />
+
+                {/* Body / Gallery */}
+                <div className="modal-body">
+                    <div className="gallery-list">
+                        {images.map((imgData, index) => (
+                            <div key={index} className="gallery-item">
+                                <div className="gallery-label-container">
+                                    <span className="gallery-step-number">{index + 1}</span>
+                                    <span className="gallery-label">{imgData.label}</span>
+                                </div>
+
+                                <div className="image-wrapper">
+                                    <img
+                                        src={imgData.src}
+                                        alt={imgData.label}
+                                        className="gallery-image"
+                                    />
+                                </div>
                             </div>
-                            {/* Add a divider if it's not the last image */}
-                            {index < images.length - 1 && <hr className="gallery-divider" />}
-                        </div>
-                    ))}
+                        ))}
+                    </div>
+                </div>
+
+                {/* Footer (Optional, good for closing) */}
+                <div className="modal-footer">
+                    <button className="secondary-btn" onClick={onClose}>Close Preview</button>
                 </div>
             </div>
         </div>
