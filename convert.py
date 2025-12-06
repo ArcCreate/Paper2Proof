@@ -5,7 +5,6 @@ from PIL import Image
 import os
 import sys
 import math
-import base64
 
 DEBUG_OUTPUT_DIR = "debug_output"
 

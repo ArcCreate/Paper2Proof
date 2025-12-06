@@ -1,5 +1,19 @@
 import React, { useRef, useMemo } from 'react';
 import { BlockMath } from 'react-katex';
+import "katex/dist/katex.min.css";
+
+export function extractEquations(latexString) {
+  if (!latexString) return [];
+
+  // Match anything between \[ ... \]
+  const matches = latexString.match(/\\\[(.*?)\\\]/gs);
+
+  if (!matches) return [];
+  return matches.map(eq =>
+    eq.replace(/\\\[/, "").replace(/\\\]/, "").trim()
+  );
+}
+
 
 const LatexRenderer = ({ latex }) => {
   if (!latex) {
@@ -11,10 +25,24 @@ const LatexRenderer = ({ latex }) => {
     );
   }
 
+  // Parse string to list of equations
+  const equations = typeof latex === "string" ? extractEquations(latex) : latex;
+
   return (
-    <BlockMath math={latex} />
+    <div>
+      {equations.map((eq, index) => (
+        <div key={index} style={{ marginBottom: "20px" }}>
+          <BlockMath
+            math={eq}
+            renderError={(error) => <span style={{ color: "red" }}>{error.name}</span>}
+          />
+
+        </div>
+      ))}
+    </div>
   );
 };
+
 
 const pipelineStepsMap = [
   { key: 'preprocessing', label: 'Image Preprocessing', desc: 'Noise reduction, contrast enhancement' },
@@ -51,7 +79,7 @@ export default function ProcessingPanel({
     if (pipelineStatus.validationOutput?.status === 'success') completedCount++;
 
     if (totalSteps === 0) return 0;
-    if (isProcessing && completedCount === 0) return 5; // visual kickstart
+    if (isProcessing && completedCount === 0) return 5;
 
     return Math.round((completedCount / totalSteps) * 100);
   }, [pipelineStatus, isProcessing]);
@@ -119,7 +147,6 @@ export default function ProcessingPanel({
     },
     {
       ...pipelineStepsMap[3],
-      // Mapping "modelInference" from backend to "LaTeX Generation" in UI
       status: pipelineStatus.modelInference?.status || 'pending',
       data: pipelineStatus.modelInference
     },
@@ -144,7 +171,7 @@ export default function ProcessingPanel({
             accept="image/png, image/jpeg, .pdf"
             style={{ display: 'none' }}
           />
-          <div style={{ color: '#999', fontSize: '1.2rem' }}>🖼️</div>
+          <div style={{ color: '#999', fontSize: '1.2rem' }}></div>
         </div>
 
         <div

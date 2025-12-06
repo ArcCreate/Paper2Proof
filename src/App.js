@@ -91,7 +91,6 @@ export default function App() {
 
     try {
       // 1. UPLOAD
-      // Note: Replace localhost with your actual backend URL
       const uploadResponse = await fetch('http://localhost:5000/api/upload', {
         method: 'POST',
         body: formData

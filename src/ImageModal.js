@@ -45,7 +45,7 @@ export default function ImageModal({ title, images, onClose }) {
                     </div>
                 </div>
 
-                {/* Footer (Optional, good for closing) */}
+                {/* Footer*/}
                 <div className="modal-footer">
                     <button className="secondary-btn" onClick={onClose}>Close Preview</button>
                 </div>

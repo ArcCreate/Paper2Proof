@@ -105,7 +105,6 @@ def upload_image():
             'status': 'uploaded',
             'temp_path': temp_path,
             'result': None,
-            # Note: Changed 'image' to 'images' (list)
             'steps': { 
                 'preprocessing': {'status': 'pending', 'images': []},
                 'ocrRecognition': {'status': 'pending', 'images': []},
@@ -136,10 +135,8 @@ def process_image(job_id):
 
     # Set status to processing immediately
     job_data['status'] = 'processing'
-    
-    # Start the thread!
     thread = threading.Thread(target=run_pipeline_background, args=(job_id,))
-    thread.daemon = True # Daemon threads die if the main server dies
+    thread.daemon = True
     thread.start()
         
     # Return immediately so the frontend can start polling
