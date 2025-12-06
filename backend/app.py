@@ -11,10 +11,6 @@ import threading
 import numpy as np
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-
-# Assuming your MathScanner class is in math_scanner.py (ensure it's in the same directory or importable)
-from convert import MathScanner 
-# Assuming convert.py is in the same directory
 from convert import MathScanner 
 
 # Define a background worker function
@@ -44,6 +40,7 @@ def run_pipeline_background(job_id):
         job_data['steps']['segmentation']['status'] = 'processing'
         dilation_vis, boxes_vis, regions = scanner.segment_regions(binary_result, straight_img)
         job_data['steps']['segmentation']['status'] = 'success'
+        JOBS[job_id]['regions'] = regions
         job_data['steps']['segmentation']['images'] = [
             {'label': 'Dilation Mask', 'src': cv2_to_base64(dilation_vis)},
             {'label': 'Segmented Boxes', 'src': cv2_to_base64(boxes_vis)}
@@ -53,6 +50,7 @@ def run_pipeline_background(job_id):
         job_data['steps']['modelInference']['status'] = 'processing'
         latex_lines = scanner.image_to_latex(regions)
         job_data['steps']['modelInference']['status'] = 'success'
+        JOBS[job_id]['latex_lines'] = latex_lines
         
         # --- STEP 5: Reassembly ---
         job_data['steps']['reassembly']['status'] = 'processing'
@@ -105,6 +103,8 @@ def upload_image():
             'status': 'uploaded',
             'temp_path': temp_path,
             'result': None,
+            'regions': None,
+            'latex_lines': None,
             'steps': { 
                 'preprocessing': {'status': 'pending', 'images': []},
                 'ocrRecognition': {'status': 'pending', 'images': []},
@@ -146,7 +146,63 @@ def process_image(job_id):
 def get_status(job_id):
     if job_id not in JOBS:
         return jsonify({'status': 'not_found'}), 404
-    return jsonify(JOBS[job_id])
+    status_data = JOBS[job_id].copy()
+    status_data.pop('regions', None)
+    status_data.pop('latex_lines', None)
+    status_data.pop('temp_path', None)
+    return jsonify(status_data)
+
+# NEW API ENDPOINT FOR RERUN
+@app.route('/api/rerun_equation/<job_id>/<int:index>', methods=['POST'])
+def rerun_equation(job_id, index):
+    if job_id not in JOBS:
+        return jsonify({'success': False, 'error_message': 'Job ID not found'}), 404
+
+    job_data = JOBS[job_id]
+
+    if job_data.get('regions') is None or job_data.get('latex_lines') is None:
+        return jsonify({
+            'success': False,
+            'error_message': 'Segmentation data not available. Must run full pipeline first.'
+        }), 400
+
+    regions = job_data['regions']
+    latex_lines = job_data['latex_lines']
+
+    if index < 0 or index >= len(regions):
+        return jsonify({
+            'success': False,
+            'error_message': f'Invalid equation index: {index}. Range is 0 to {len(regions) - 1}'
+        }), 400
+
+    try:
+        # 1. Get the specific region image (numpy array)
+        region_to_rerun = regions[index]
+
+        # 2. Run the single inference
+        new_latex = scanner.rerun_single_inference(region_to_rerun)
+
+        # 3. Update stored latex lines
+        latex_lines[index] = new_latex
+        job_data['latex_lines'] = latex_lines  # Reassign
+
+        # 4. Reassemble the full document
+        final_doc = scanner.reassemble_document(latex_lines)
+        job_data['result'] = final_doc
+
+        # 5. Return the new full output
+        return jsonify({
+            'success': True,
+            'new_latex_output': final_doc
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error_message': f'Rerun failed: {str(e)}'
+        }), 500
+
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

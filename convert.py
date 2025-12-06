@@ -144,7 +144,6 @@ class MathScanner:
         
         self._save_debug_image(clean_binary, "02c_cleaned_binary_final")
         
-        # RETURN TUPLE: (Cleaned Full Visualization, Result Binary)
         return cleaned_img_full, clean_binary
 
     def _merge_boxes(self, boxes, overlap_threshold=0.3):
@@ -293,6 +292,23 @@ class MathScanner:
                 latex_results.append("\\text{Error}")
 
         return latex_results
+    
+    def rerun_single_inference(self, region):
+        print("\n[RERUN] Running single LatexOCR Model inference...")
+        region_gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
+        pil_img = Image.fromarray(region_gray)
+        
+        if not self.model:
+            print(" > Rerun failed: Model not loaded.")
+            return "\\text{Error: Model not loaded}"
+        
+        try:
+            result = self.model(pil_img)
+            print(f" > Rerun Result: {result}")
+            return result
+        except Exception as e:
+            print(f" > Rerun Failed: {e}")
+            return "\\text{Error in Rerun}"
     
     def reassemble_document(self, latex_list):
         print("\n[STEP 5] Generating Final LaTeX Document...")

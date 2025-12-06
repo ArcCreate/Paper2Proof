@@ -23,7 +23,7 @@ npm install
 
 ### In Terminal 1 start the backend server
 ```bash
-pix2tex app.py
+python app.py
 ```
 
 ### In Terminal 2 start the frontend React server

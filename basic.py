@@ -2,7 +2,7 @@ from PIL import Image
 from pix2tex.cli import LatexOCR
 
 # Load the image
-img = Image.open('images/img1.png')
+img = Image.open('images/testing2.png')
 
 # Initialize the LaTeX OCR model
 model = LatexOCR()

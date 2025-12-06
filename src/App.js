@@ -37,12 +37,15 @@ export default function App() {
 
   const [segmentResults, setSegmentResults] = useState([]);
 
+  const [rerunLoadingIndex, setRerunLoadingIndex] = useState(-1);
+
   const handleFileUpload = (uploadedFile) => {
     if (uploadedFile) {
       setFile(uploadedFile);
       setPreviewUrl(URL.createObjectURL(uploadedFile));
       setLatexOutput('');
       setPipelineStatus(initialPipeline);
+      setJobId(null);
     }
   };
 
@@ -139,6 +142,34 @@ export default function App() {
     }
   };
 
+  const handleRerunEquation = async (jobId, index) => {
+    if (!jobId) {
+      console.error("Cannot rerun: Missing job ID.");
+      return;
+    }
+    setRerunLoadingIndex(index);
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/rerun_equation/${jobId}/${index}`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error('Rerun request failed');
+      }
+
+      const result = await response.json();
+      setLatexOutput(result.new_latex_output);
+
+    } catch (error) {
+      console.error(`Rerunning equation ${index + 1} failed:`, error);
+      setLatexOutput(prev => `\\text{Rerun Failed for Eq. } ${index + 1} \\text{: ${error.message}} \n ${prev}`);
+
+    } finally {
+      setRerunLoadingIndex(-1);
+    }
+  };
+
   return (
     <div className="app-container">
       <Header />
@@ -152,6 +183,9 @@ export default function App() {
           onFileUpload={handleFileUpload}
           onProcess={handleProcess}
           onStepClick={showIntermediateImages}
+          jobId={jobId}
+          onRerunEquation={handleRerunEquation}
+          rerunLoadingIndex={rerunLoadingIndex}
         />
 
         {modalImages && (

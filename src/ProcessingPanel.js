@@ -14,8 +14,16 @@ export function extractEquations(latexString) {
   );
 }
 
+const copyToClipboard = (text) => {
+  navigator.clipboard.writeText(text).then(() => {
+    // Simple visual feedback (e.g., alert or console log)
+    console.log(`Copied: ${text.substring(0, 30)}...`);
+  }).catch(err => {
+    console.error('Could not copy text: ', err);
+  });
+};
 
-const LatexRenderer = ({ latex }) => {
+const LatexRenderer = ({ latex, jobId, onRerunEquation, rerunLoadingIndex }) => {
   if (!latex) {
     return (
       <div style={{ textAlign: 'center', opacity: 0.5, padding: '20px' }}>
@@ -30,15 +38,81 @@ const LatexRenderer = ({ latex }) => {
 
   return (
     <div>
-      {equations.map((eq, index) => (
-        <div key={index} style={{ marginBottom: "20px" }}>
-          <BlockMath
-            math={eq}
-            renderError={(error) => <span style={{ color: "red" }}>{error.name}</span>}
-          />
+      {equations.map((eq, index) => {
+        const isLoading = rerunLoadingIndex === index;
 
-        </div>
-      ))}
+        return (
+          <div
+            key={index}
+            onClick={() => copyToClipboard(eq)}
+            style={{
+              marginBottom: "20px",
+              position: 'relative',
+              cursor: 'copy',
+              padding: '5px 0',
+              border: isLoading ? '1px solid #ddd' : 'none',
+              borderRadius: '4px',
+              overflow: 'hidden'
+            }}
+          >
+            {isLoading && (
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: '100%',
+                background: 'rgba(255, 255, 255, 0.85)',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: 10,
+              }}>
+                ⏳ **Rerunning Inference...**
+              </div>
+            )}
+
+            <BlockMath
+              math={eq}
+              renderError={(error) => (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    border: '1px solid red',
+                    padding: '10px',
+                    borderRadius: '4px',
+                    background: '#ffebeb',
+                  }}
+                >
+                  <span style={{ color: "red", fontWeight: 'bold' }}>{error.name}</span>
+                  {jobId && onRerunEquation && (
+                    <button
+                      className="retry-btn"
+                      // Disable button while loading
+                      disabled={isLoading}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRerunEquation(jobId, index)
+                      }}
+                      style={{
+                        marginLeft: '10px', padding: '5px 10px',
+                        cursor: isLoading ? 'not-allowed' : 'pointer',
+                        backgroundColor: isLoading ? '#e0e0e0' : '#f9f9f9',
+                        border: '1px solid #ccc',
+                        borderRadius: '3px'
+                      }}
+                    >
+                      {isLoading ? 'Loading...' : `Rerun Inference (Eq ${index + 1})`}
+                    </button>
+                  )}
+                </div>
+              )}
+            />
+
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -60,7 +134,10 @@ export default function ProcessingPanel({
   isProcessing,
   onFileUpload,
   onProcess,
-  onStepClick
+  onStepClick,
+  jobId,
+  onRerunEquation,
+  rerunLoadingIndex
 }) {
   const fileInputRef = useRef(null);
 
@@ -288,7 +365,12 @@ export default function ProcessingPanel({
 
           {/* Right: Preview */}
           <div className="render-preview">
-            <LatexRenderer latex={latexOutput} />
+            <LatexRenderer
+              latex={latexOutput}
+              jobId={jobId}
+              onRerunEquation={onRerunEquation}
+              rerunLoadingIndex={rerunLoadingIndex}
+            />
           </div>
         </div>
       </div>
