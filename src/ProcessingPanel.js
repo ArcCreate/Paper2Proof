@@ -63,7 +63,7 @@ const LatexRenderer = ({ latex, jobId, onRerunEquation, rerunLoadingIndex }) => 
                 right: 0,
                 bottom: 0,
                 height: '100%',
-                background: 'rgba(255, 255, 255, 0.85)',
+                background: 'rgba(255, 255, 255, 1)',
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
