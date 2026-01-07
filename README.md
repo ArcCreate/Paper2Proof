@@ -4,8 +4,8 @@
 ## 📄 Downloads
 
 
-- **[Download Presentation Slides](Paper.pdf)**
-- **[Download Paper (PDF)](Paper2Proof.pdf)**
+- **[Download Paper](Paper.pdf)**
+- **[Download Presentation Slides](Paper2Proof.pdf)**
 
 ---
 
