@@ -3,8 +3,8 @@
 
 ## 📄 Downloads
 
-- **[Download Paper (PDF)](paper.pdf)**
-- **[Download Presentation Slides](slides.pdf)**
+- **[Download Paper (PDF)](Paper2Proof.pdf)**
+- **[Download Presentation Slides](CSE_455.pdf)**
 
 ---
 
